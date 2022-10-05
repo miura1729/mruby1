@@ -140,6 +140,7 @@ enum {
   OP_DEBUG,/*     A B C   print R(A),R(B),R(C)                            */
   OP_STOP,/*              stop VM                                         */
   OP_ERR,/*       Bx      raise RuntimeError with message Lit(Bx)         */
+  OP_PHI,/*       Bx      dummy instruction for data flow anlysis         */
 
   OP_RSVD1,/*             reserved instruction #1                         */
   OP_RSVD2,/*             reserved instruction #2                         */

@@ -413,6 +413,8 @@ codedump(mrb_state *mrb, mrb_irep *irep)
         printf("OP_ERR\t%s\n", RSTRING_PTR(s));
       }
       break;
+    case OP_PHI:
+      printf("OP_PHI\tR%d\t%03d (%d)\n", GETARG_A(c), i+GETARG_sBx(c), GETARG_sBx(c));      break;
     case OP_EPUSH:
       printf("OP_EPUSH\t:I(%+d)\n", GETARG_Bx(c)+1);
       break;

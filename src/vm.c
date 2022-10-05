@@ -985,7 +985,7 @@ mrb_vm_exec(mrb_state *mrb, struct RProc *proc, mrb_code *pc)
     &&L_OP_LAMBDA, &&L_OP_RANGE, &&L_OP_OCLASS,
     &&L_OP_CLASS, &&L_OP_MODULE, &&L_OP_EXEC,
     &&L_OP_METHOD, &&L_OP_SCLASS, &&L_OP_TCLASS,
-    &&L_OP_DEBUG, &&L_OP_STOP, &&L_OP_ERR,
+    &&L_OP_DEBUG, &&L_OP_STOP, &&L_OP_ERR, &&L_OP_PHI,
   };
 #endif
 
@@ -2965,6 +2965,11 @@ RETRY_TRY_BLOCK:
       ERR_PC_SET(mrb, pc);
       mrb_exc_set(mrb, exc);
       goto L_RAISE;
+    }
+
+    CASE(OP_PHI) {
+      /* do nothing */
+      NEXT;
     }
   }
   END_DISPATCH;

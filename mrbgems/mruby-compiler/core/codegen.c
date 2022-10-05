@@ -1481,26 +1481,32 @@ codegen(codegen_scope *s, node *tree, int val)
       codegen(s, tree->car, VAL);
       pop();
       pos1 = genop_peep(s, MKOP_AsBx(OP_JMPNOT, cursp(), 0), NOVAL);
+      genop(s, MKOP_sBx(OP_PHI, -1));
 
       codegen(s, tree->cdr->car, val);
       if (e) {
         if (val) pop();
         pos2 = genop(s, MKOP_sBx(OP_JMP, 0));
         dispatch(s, pos1);
+	genop(s, MKOP_sBx(OP_PHI, pos1 - s->pc));
         codegen(s, e, val);
         dispatch(s, pos2);
+	genop(s, MKOP_sBx(OP_PHI, pos2 - s->pc));
       }
       else {
         if (val) {
           pop();
           pos2 = genop(s, MKOP_sBx(OP_JMP, 0));
           dispatch(s, pos1);
+	  genop(s, MKOP_sBx(OP_PHI, pos1 - s->pc));
           genop(s, MKOP_A(OP_LOADNIL, cursp()));
           dispatch(s, pos2);
           push();
+	  genop(s, MKOP_sBx(OP_PHI, pos2 - s->pc));
         }
         else {
           dispatch(s, pos1);
+	  genop(s, MKOP_sBx(OP_PHI, pos1 - s->pc));
         }
       }
     }
