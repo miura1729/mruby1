@@ -9,6 +9,7 @@
 
 #include "common.h"
 #include <mruby/compile.h>
+#include <mruby/bit_irep.h>
 
 /**
  * Compiled mruby scripts.
@@ -45,6 +46,9 @@ typedef struct mrb_irep {
   struct mrb_irep_debug_info* debug_info;
 
   int ilen, plen, slen, rlen, refcnt;
+
+  /* bitmap for data flow analysis */
+  mrb_bit_irep bitirep;
 } mrb_irep;
 
 #define MRB_ISEQ_NO_FREE 1
@@ -56,6 +60,8 @@ void mrb_irep_free(mrb_state*, struct mrb_irep*);
 void mrb_irep_incref(mrb_state*, struct mrb_irep*);
 void mrb_irep_decref(mrb_state*, struct mrb_irep*);
 void mrb_irep_cutref(mrb_state*, struct mrb_irep*);
+
+extern int mrb_make_bitmap_irep(mrb_state*, mrb_irep*);
 
 MRB_END_DECL
 
