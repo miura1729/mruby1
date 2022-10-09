@@ -3,10 +3,16 @@
 
 typedef uint64_t bitmap;
 
-typedef struct BitIrep {
+struct regbit {
   bitmap *phi;
   bitmap *src;
   bitmap *dst;
+};
+
+typedef struct BitIrep {
+  struct regbit normal;
+  struct regbit reverse;
+
   int bnum;
   int bpos;
 } mrb_bit_irep;
