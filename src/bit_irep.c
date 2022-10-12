@@ -10,13 +10,12 @@ static void make_bitmap_irep_aux(mrb_state *mrb, mrb_irep *irep,
 
   switch (GET_OPCODE(inst)) {
   case OP_PHI:
-    bitirep->phi[bitpos] |= (1 << bitoff);
-    bitirep->phi[bitpos] |= (1 << bitoff);
+    bitirep->phi[bitpos] |= (1llu << bitoff);
     break;
 
   case OP_MOVE:
-    bitirep->dst[GETARG_A(inst) * bnum + bitpos] |= (1 << bitoff);
-    bitirep->src[GETARG_B(inst) * bnum + bitpos] |= (1 << bitoff);
+    bitirep->dst[GETARG_A(inst) * bnum + bitpos] |= (1llu << bitoff);
+    bitirep->src[GETARG_B(inst) * bnum + bitpos] |= (1llu << bitoff);
     break;
 
   case OP_LOADL:
@@ -36,30 +35,30 @@ static void make_bitmap_irep_aux(mrb_state *mrb, mrb_irep *irep,
   case OP_MODULE:
   case OP_SCLASS:
   case OP_TCLASS:
-    bitirep->dst[GETARG_A(inst) * bnum + bitpos] |= (1 << bitoff);
+    bitirep->dst[GETARG_A(inst) * bnum + bitpos] |= (1llu << bitoff);
     break;
 
   case OP_GETIV:
   case OP_GETCV:
   case OP_GETCONST:
   case OP_GETMCNST:
-    bitirep->dst[GETARG_A(inst) * bnum + bitpos] |= (1 << bitoff);
+    bitirep->dst[GETARG_A(inst) * bnum + bitpos] |= (1llu << bitoff);
     break;
 
   case OP_SETIV:
   case OP_SETCV:
   case OP_SETCONST:
   case OP_SETMCNST:
-    bitirep->src[GETARG_A(inst) * bnum + bitpos] |= (1 << bitoff);
+    bitirep->src[GETARG_A(inst) * bnum + bitpos] |= (1llu << bitoff);
     break;
 
   case OP_RETURN:
-    bitirep->src[GETARG_A(inst) * bnum + bitpos] |= (1 << bitoff);
+    bitirep->src[GETARG_A(inst) * bnum + bitpos] |= (1llu << bitoff);
     break;
 
   case OP_LOADSELF:
-    bitirep->dst[GETARG_A(inst) * bnum + bitpos] |= (1 << bitoff);
-    bitirep->src[0 * bnum + bitpos] |= (1 << bitoff);
+    bitirep->dst[GETARG_A(inst) * bnum + bitpos] |= (1llu << bitoff);
+    bitirep->src[0 * bnum + bitpos] |= (1llu << bitoff);
     break;
 
   case OP_ADD:
@@ -71,18 +70,19 @@ static void make_bitmap_irep_aux(mrb_state *mrb, mrb_irep *irep,
   case OP_LE:
   case OP_GT:
   case OP_GE:
-    bitirep->dst[GETARG_A(inst) * bnum  + bitpos] |= (1 << bitoff);
-    bitirep->src[GETARG_A(inst) * bnum + bitpos] |= (1 << bitoff);
-    bitirep->src[(GETARG_A(inst) + 1) * bnum + bitpos] |= (1 << bitoff);
+    bitirep->dst[GETARG_A(inst) * bnum  + bitpos] |= (1llu << bitoff);
+    bitirep->src[GETARG_A(inst) * bnum + bitpos] |= (1llu << bitoff);
+    bitirep->src[(GETARG_A(inst) + 1) * bnum + bitpos] |= (1llu << bitoff);
     break;
       
   case OP_ADDI:
   case OP_SUBI:
-    bitirep->dst[GETARG_A(inst) * bnum  + bitpos] |= (1 << bitoff);
-    bitirep->src[GETARG_A(inst) * bnum + bitpos] |= (1 << bitoff);
+    bitirep->dst[GETARG_A(inst) * bnum  + bitpos] |= (1llu << bitoff);
+    bitirep->src[GETARG_A(inst) * bnum + bitpos] |= (1llu << bitoff);
+    break;
 
   case OP_SENDB:
-    bitirep->src[(GETARG_A(inst) + GETARG_C(inst) + 1) * bnum + bitpos] |= (1 << bitoff);
+    bitirep->src[(GETARG_A(inst) + GETARG_C(inst) + 1) * bnum + bitpos] |= (1llu << bitoff);
     // Fall through
 
   case OP_SEND:
@@ -91,10 +91,10 @@ static void make_bitmap_irep_aux(mrb_state *mrb, mrb_irep *irep,
       argnum = 1;
     }
 	
-    bitirep->dst[GETARG_A(inst) * bnum + bitpos] |= (1 << bitoff);
+    bitirep->dst[GETARG_A(inst) * bnum + bitpos] |= (1llu << bitoff);
     if (argnum >= 0) {
       for (int k = 0; k < argnum + 1; k++) {
-	bitirep->src[(GETARG_A(inst) + k) * bnum + bitpos] |= (1 << bitoff);
+	bitirep->src[(GETARG_A(inst) + k) * bnum + bitpos] |= (1llu << bitoff);
       }
     }
     break;
