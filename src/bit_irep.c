@@ -106,6 +106,25 @@ static void make_bitmap_irep_aux(mrb_state *mrb, mrb_irep *irep,
   }
 }
 
+int bitmap_ctz(mrb_state *mrb, mrb_irep *irep, bitmap *bit, int start)
+{
+  int cbit = BITMAP_NUM(start) - 1;
+  int cpos = BITMAP_POS(start);
+
+  if (cpos < (sizeof(bitmap) * 8 - 1) && bit[cbit] > (1llu << (cpos + 1))) {
+    return (__builtin_ctzll(bit[cbit] & ~((1llu << (cpos + 1)) - 1)) +
+	    cbit * sizeof(bitmap) * 8);
+  }
+  cpos = 0;
+  cbit++;
+  for (;bit[cbit] == 0; cbit++) {
+    /* Do nothing */
+  }
+
+  return (__builtin_ctzll(bit[cbit]) +
+	  cbit * sizeof(bitmap) * 8);
+}
+
 int mrb_make_bitmap_irep(mrb_state *mrb, mrb_irep *irep)
 {
   int isize = irep->ilen;
@@ -142,5 +161,4 @@ int mrb_make_bitmap_irep(mrb_state *mrb, mrb_irep *irep)
       bitpos++;
     }
   }
-
 }
