@@ -690,6 +690,7 @@ lambda_body(codegen_scope *s, node *tree, int blk)
     struct loopinfo *lp = loop_push(s, LOOP_BLOCK);
     lp->pc1 = new_label(s);
   }
+  genop(s, MKOP_sBx(OP_PHI, 0));
   tree = tree->cdr;
   if (tree->car) {
     mrb_aspec a;
@@ -776,6 +777,7 @@ scope_body(codegen_scope *s, node *tree, int val)
     raise_error(s, "unexpected scope");
   }
 
+  //genop(s, MKOP_sBx(OP_PHI, 0));
   codegen(scope, tree->cdr, VAL);
   if (!s->iseq) {
     genop(scope, MKOP_A(OP_STOP, 0));
