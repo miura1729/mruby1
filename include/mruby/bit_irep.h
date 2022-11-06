@@ -21,7 +21,4 @@ typedef struct BitIrep {
 #define BITMAP_NUM(n) (((n) / BITMAP_SIZE) + 1)
 #define BITMAP_POS(n) ((n) & (BITMAP_SIZE - 1))
 
-extern int bitmap_mask(bitmap *dst, bitmap *src, int pos);
-extern int bitmap_and(bitmap *dst, bitmap *src1, bitmap *src2);
-extern int bitmap_popcnt(bitmap *src);
 
