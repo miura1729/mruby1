@@ -1320,6 +1320,7 @@ codegen(codegen_scope *s, node *tree, int val)
   tree = tree->cdr;
   switch (nt) {
   case NODE_BEGIN:
+    genop(s, MKOP_sBx(OP_PHI, 0));
     if (val && !tree) {
       genop(s, MKOP_A(OP_LOADNIL, cursp()));
       push();

@@ -1,5 +1,6 @@
 #include <math.h>
 #include <string.h>
+#include <assert.h>
 #include <mruby/irep.h>
 #include <mruby/opcode.h>
 
@@ -126,9 +127,14 @@ int bitmap_ctz(mrb_state *mrb, mrb_irep *irep, bitmap *bit, int start)
   for (;bit[cbit] == 0; cbit++) {
     /* Do nothing */
   }
+  if (cbit < irep->bitirep.bnum) {
+    return (__builtin_ctzll(bit[cbit]) +
+	    cbit * sizeof(bitmap) * 8);
+  }
+  else {
+    return -1;
+  }
 
-  return (__builtin_ctzll(bit[cbit]) +
-	  cbit * sizeof(bitmap) * 8);
 }
 
 /* use for PHI */
@@ -174,7 +180,7 @@ bitmap *bitmap_mask_with_shift(mrb_state *mrb, mrb_irep *irep, bitmap *dst, bitm
   }
   dst[ebit - 1] >>= 1;
 
-  memset(dst + ebit * sizeof(bitmap), 0, (bnum - ebit) * sizeof(bitmap));
+  memset(dst + (ebit - 1) * sizeof(bitmap), 0, (bnum - ebit + 1) * sizeof(bitmap));
 
   return dst;
 }
@@ -209,7 +215,7 @@ bitmap *bitmap_mask_wo_shift(mrb_state *mrb, mrb_irep *irep, bitmap *dst, bitmap
     dst[i] ^= src[i];
   }
 
-  memset(dst + ebit * sizeof(bitmap), 0, (bnum - ebit) * sizeof(bitmap));
+  memset(dst + (ebit - 1) * sizeof(bitmap), 0, (bnum - ebit + 1) * sizeof(bitmap));
 
   return dst;
 }
@@ -309,24 +315,29 @@ int bitmap_cmp(mrb_state *mrb, mrb_irep *irep, bitmap *dst, bitmap *src)
 void compute_reg_bitmap_aux(mrb_state *mrb, mrb_irep *irep, int pos)
 {
   const int bnum = irep->bitirep.bnum;
+  const bitmap *block_map = __builtin_alloca(bnum * sizeof(bitmap));
+  const bitmap *src_map = __builtin_alloca(bnum * sizeof(bitmap));
+  bitmap *dst_map = __builtin_alloca(bnum * sizeof(bitmap));
+  bitmap *tmpbit = __builtin_alloca(bnum * sizeof(bitmap));
+
   const int isize = irep->ilen;
   const int rnum = irep->nregs;
   const int regbitsz = bnum * sizeof(bitmap);
-  const int nphipos = bitmap_ctz(mrb, irep, irep->bitirep.reverse.phi, pos);
+  const int nphipos = bitmap_ctz(mrb, irep, irep->bitirep.reverse.phi, irep->ilen - pos - 1);
   const int cbit = BITMAP_NUM(nphipos);
   const int coff = BITMAP_POS(nphipos);
-  bitmap phi_bitmap = 1llu << coff;
+  const bitmap phi_bitmap = 1llu << coff;
 
-  bitmap *block_map = __builtin_alloca(bnum * sizeof(bitmap));
-  bitmap *src_map = __builtin_alloca(bnum * sizeof(bitmap));
-  bitmap *dst_map = __builtin_alloca(bnum * sizeof(bitmap));
-
-  const int rpos = bnum - pos - 1;
+  const int rpos = irep->ilen - pos - 1;
+  if (rpos < 0) printf("foo");
   bitmap_mask_wo_shift(mrb, irep, block_map, irep->bitirep.reverse.phi, rpos);
   for (int i = 0; i <rnum; i++) {
     bitmap_and(mrb, irep, dst_map, irep->bitirep.reverse.dst + i, block_map);
     bitmap_and(mrb, irep, src_map, irep->bitirep.reverse.src + i, block_map);
-    if (bitmap_cmp(mrb, irep, dst_map, src_map) < 0) {
+    if (bitmap_cmp(mrb, irep, dst_map, src_map) < 0 &&
+	bitmap_cmp(mrb, irep, 
+		   bitmap_xor(mrb, irep, tmpbit, dst_map, src_map),
+		   src_map) < 0) {
       dst_map[cbit]  |= phi_bitmap;
     }
   }
