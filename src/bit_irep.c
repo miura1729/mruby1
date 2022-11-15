@@ -155,18 +155,17 @@ bitmap *bitmap_mask_with_shift(mrb_state *mrb, mrb_irep *irep, bitmap *dst, bitm
   }
   
   int ebit = cbit + 1;
+
+  dst[cbit] = src[cbit] -  mask_lsb;
   if (src[cbit] < mask_lsb) {
-    dst[cbit] = src[cbit] - mask_lsb;
-    for (ebit = cbit + 1; ebit < bnum && src[ebit] == 0; ebit++) {
+    for (; ebit < bnum && src[ebit] == 0; ebit++) {
       dst[ebit] = src[ebit] - 1;
     }
-    dst[ebit] = src[ebit] - 1;
-    ebit++;
+    if (ebit < bnum) {
+      dst[ebit] = src[ebit] - 1;
+      ebit++;
+    }
   }
-  else {
-    dst[cbit] = src[cbit] -  mask_lsb;
-  }
-
 
   /* xor for not changed bit to 0 */
   for (int i = cbit; i < ebit; i++) {
@@ -180,7 +179,7 @@ bitmap *bitmap_mask_with_shift(mrb_state *mrb, mrb_irep *irep, bitmap *dst, bitm
   }
   dst[ebit - 1] >>= 1;
 
-  memset(dst + (ebit - 1) * sizeof(bitmap), 0, (bnum - ebit + 1) * sizeof(bitmap));
+  memset(dst + ebit, 0, (bnum - ebit) * sizeof(bitmap));
 
   return dst;
 }
@@ -197,25 +196,24 @@ bitmap *bitmap_mask_wo_shift(mrb_state *mrb, mrb_irep *irep, bitmap *dst, bitmap
   memset(dst, 0, cbit * sizeof(bitmap));
 
   int ebit = cbit + 1;
+
+  dst[cbit] = src[cbit] - mask_lsb;
   if (src[cbit] < mask_lsb) {
-    dst[cbit] = src[cbit] - mask_lsb;
-    for (ebit = cbit + 1; ebit < bnum && src[ebit] == 0; ebit++) {
+    for (; ebit < bnum && src[ebit] == 0; ebit++) {
       dst[ebit] = src[ebit] - 1;
     }
-    dst[ebit] = src[ebit] - 1;
-    ebit++;
+    if (ebit < bnum) {
+      dst[ebit] = src[ebit] - 1;
+      ebit++;
+    }
   }
-  else {
-    dst[cbit] = src[cbit] -  mask_lsb;
-  }
-
 
   /* xor for not changed bit to 0 */
   for (int i = cbit; i < ebit; i++) {
     dst[i] ^= src[i];
   }
 
-  memset(dst + (ebit - 1) * sizeof(bitmap), 0, (bnum - ebit + 1) * sizeof(bitmap));
+  memset(dst + ebit, 0, (bnum - ebit) * sizeof(bitmap));
 
   return dst;
 }
@@ -315,30 +313,36 @@ int bitmap_cmp(mrb_state *mrb, mrb_irep *irep, bitmap *dst, bitmap *src)
 void compute_reg_bitmap_aux(mrb_state *mrb, mrb_irep *irep, int pos)
 {
   const int bnum = irep->bitirep.bnum;
-  const bitmap *block_map = __builtin_alloca(bnum * sizeof(bitmap));
-  const bitmap *src_map = __builtin_alloca(bnum * sizeof(bitmap));
+  bitmap *block_map = __builtin_alloca(bnum * sizeof(bitmap));
+  bitmap *src_map = __builtin_alloca(bnum * sizeof(bitmap));
   bitmap *dst_map = __builtin_alloca(bnum * sizeof(bitmap));
   bitmap *tmpbit = __builtin_alloca(bnum * sizeof(bitmap));
 
   const int isize = irep->ilen;
   const int rnum = irep->nregs;
-  const int regbitsz = bnum * sizeof(bitmap);
-  const int nphipos = bitmap_ctz(mrb, irep, irep->bitirep.reverse.phi, irep->ilen - pos - 1);
-  const int cbit = BITMAP_NUM(nphipos);
-  const int coff = BITMAP_POS(nphipos);
-  const bitmap phi_bitmap = 1llu << coff;
+  const int nphiposr = bitmap_ctz(mrb, irep, irep->bitirep.reverse.phi, irep->ilen - pos - 1);
+
+  const int cbitr = BITMAP_NUM(nphiposr);
+  const int coffr = BITMAP_POS(nphiposr);
+  const bitmap phi_bitmapr = 1llu << coffr;
+
+  const int nphipos = nphiposr - pos - 1;
+  const int cbit = BITMAP_NUM(nphiposr);
+  const int coff = BITMAP_POS(nphiposr);
+  const bitmap phi_bitmap = 1llu << coffr;
 
   const int rpos = irep->ilen - pos - 1;
   if (rpos < 0) printf("foo");
   bitmap_mask_wo_shift(mrb, irep, block_map, irep->bitirep.reverse.phi, rpos);
   for (int i = 0; i <rnum; i++) {
-    bitmap_and(mrb, irep, dst_map, irep->bitirep.reverse.dst + i, block_map);
-    bitmap_and(mrb, irep, src_map, irep->bitirep.reverse.src + i, block_map);
+    bitmap_and(mrb, irep, dst_map, irep->bitirep.reverse.dst + i * bnum, block_map);
+    bitmap_and(mrb, irep, src_map, irep->bitirep.reverse.src + i * bnum, block_map);
     if (bitmap_cmp(mrb, irep, dst_map, src_map) < 0 &&
 	bitmap_cmp(mrb, irep, 
 		   bitmap_xor(mrb, irep, tmpbit, dst_map, src_map),
 		   src_map) < 0) {
-      dst_map[cbit]  |= phi_bitmap;
+      irep->bitirep.reverse.dst[cbitr + i * bnum]  |= phi_bitmapr;
+      irep->bitirep.normal.dst[cbit + i * bnum]  |= phi_bitmap;
     }
   }
 }
