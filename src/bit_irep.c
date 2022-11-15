@@ -300,7 +300,7 @@ int bitmap_cmp(mrb_state *mrb, mrb_irep *irep, bitmap *dst, bitmap *src)
   int bnum = irep->bitirep.bnum;
   int i = 0;
 
-  for (i = bnum; i >= 0 && dst[i] == src[i]; i--);
+  for (i = bnum - 1; i >= 0 && dst[i] == src[i]; i--);
 
   if (i < 0) {
     return 0;
@@ -322,14 +322,14 @@ void compute_reg_bitmap_aux(mrb_state *mrb, mrb_irep *irep, int pos)
   const int rnum = irep->nregs;
   const int nphiposr = bitmap_ctz(mrb, irep, irep->bitirep.reverse.phi, irep->ilen - pos - 1);
 
-  const int cbitr = BITMAP_NUM(nphiposr);
+  const int cbitr = BITMAP_NUM(nphiposr) - 1;
   const int coffr = BITMAP_POS(nphiposr);
   const bitmap phi_bitmapr = 1llu << coffr;
 
-  const int nphipos = nphiposr - pos - 1;
-  const int cbit = BITMAP_NUM(nphiposr);
-  const int coff = BITMAP_POS(nphiposr);
-  const bitmap phi_bitmap = 1llu << coffr;
+  const int nphipos = irep->ilen - nphiposr - 1;
+  const int cbit = BITMAP_NUM(nphipos) - 1;
+  const int coff = BITMAP_POS(nphipos);
+  const bitmap phi_bitmap = 1llu << coff;
 
   const int rpos = irep->ilen - pos - 1;
   if (rpos < 0) printf("foo");
@@ -337,10 +337,10 @@ void compute_reg_bitmap_aux(mrb_state *mrb, mrb_irep *irep, int pos)
   for (int i = 0; i <rnum; i++) {
     bitmap_and(mrb, irep, dst_map, irep->bitirep.reverse.dst + i * bnum, block_map);
     bitmap_and(mrb, irep, src_map, irep->bitirep.reverse.src + i * bnum, block_map);
-    if (bitmap_cmp(mrb, irep, dst_map, src_map) < 0 &&
+    if (bitmap_cmp(mrb, irep, dst_map, src_map) > 0 ||
 	bitmap_cmp(mrb, irep, 
 		   bitmap_xor(mrb, irep, tmpbit, dst_map, src_map),
-		   src_map) < 0) {
+		   src_map) > 0) {
       irep->bitirep.reverse.dst[cbitr + i * bnum]  |= phi_bitmapr;
       irep->bitirep.normal.dst[cbit + i * bnum]  |= phi_bitmap;
     }
