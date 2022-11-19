@@ -5,7 +5,7 @@
 #include <mruby/opcode.h>
 
 static void make_bitmap_irep_aux(mrb_state *mrb, mrb_irep *irep,
-				 int inst, int bitpos, int bitoff,
+				 mrb_code inst, int bitpos, int bitoff,
 				 struct regbit *bitirep)
 {
   int bnum = irep->bitirep.bnum;
@@ -310,7 +310,7 @@ int bitmap_cmp(mrb_state *mrb, mrb_irep *irep, bitmap *dst, bitmap *src)
   }
 }
 
-void compute_reg_bitmap_aux(mrb_state *mrb, mrb_irep *irep, int pos)
+int compute_reg_bitmap_local(mrb_state *mrb, mrb_irep *irep, int pos)
 {
   const int bnum = irep->bitirep.bnum;
   bitmap *block_map = __builtin_alloca(bnum * sizeof(bitmap));
@@ -320,20 +320,36 @@ void compute_reg_bitmap_aux(mrb_state *mrb, mrb_irep *irep, int pos)
 
   const int isize = irep->ilen;
   const int rnum = irep->nregs;
-  const int nphiposr = bitmap_ctz(mrb, irep, irep->bitirep.reverse.phi, irep->ilen - pos - 1);
 
+  const int rpos = isize - pos - 1;
+
+  const int nphiposr = bitmap_ctz(mrb, irep, irep->bitirep.reverse.phi, rpos);
   const int cbitr = BITMAP_NUM(nphiposr) - 1;
   const int coffr = BITMAP_POS(nphiposr);
   const bitmap phi_bitmapr = 1llu << coffr;
 
-  const int nphipos = irep->ilen - nphiposr - 1;
+  const int nphipos = isize - nphiposr - 1;
   const int cbit = BITMAP_NUM(nphipos) - 1;
   const int coff = BITMAP_POS(nphipos);
   const bitmap phi_bitmap = 1llu << coff;
+  mrb_code inst;
+  int updatef = 0;
 
-  const int rpos = irep->ilen - pos - 1;
+  if (nphiposr < 0) {
+    /* Top of method */
+    return updatef;
+  }
+
+  inst = irep->iseq[nphipos];
+  if (GET_OPCODE(inst) == OP_RETURN) {
+    /* RETURN - PHI sequence */
+    return updatef;
+  }
+
   if (rpos < 0) printf("foo");
   bitmap_mask_wo_shift(mrb, irep, block_map, irep->bitirep.reverse.phi, rpos);
+
+  /* Set PHI-intraction bit if reg read value from out of the block */
   for (int i = 0; i <rnum; i++) {
     bitmap_and(mrb, irep, dst_map, irep->bitirep.reverse.dst + i * bnum, block_map);
     bitmap_and(mrb, irep, src_map, irep->bitirep.reverse.src + i * bnum, block_map);
@@ -341,25 +357,69 @@ void compute_reg_bitmap_aux(mrb_state *mrb, mrb_irep *irep, int pos)
 	bitmap_cmp(mrb, irep, 
 		   bitmap_xor(mrb, irep, tmpbit, dst_map, src_map),
 		   src_map) > 0) {
+
+      if (irep->bitirep.reverse.dst[cbitr + i * bnum] & phi_bitmapr == 0) {
+	updatef |= 1;
+      }
+      
       irep->bitirep.reverse.dst[cbitr + i * bnum]  |= phi_bitmapr;
       irep->bitirep.normal.dst[cbit + i * bnum]  |= phi_bitmap;
+
+      /*      irep->bitirep.reverse.src[cbitr + i * bnum]  |= phi_bitmapr;
+	      irep->bitirep.normal.src[cbit + i * bnum]  |= phi_bitmap;*/
+
+      /* diffusion to previous block */
+      int jmppos = nphipos + GETARG_sBx(inst);
+      if (GET_OPCODE(inst) == OP_PHI && jmppos != nphipos) {
+	/* jmp instruction */
+	const int jbit = BITMAP_NUM(jmppos) - 1;
+	const int joff = BITMAP_POS(jmppos);
+	const bitmap jmp_bitmap = 1llu << joff;
+	const int jmpposr = isize - jmppos - 1;
+	const int jbitr = BITMAP_NUM(jmpposr) - 1;
+	const int joffr = BITMAP_POS(jmpposr);
+	const bitmap jmp_bitmapr = 1llu << joffr;
+	
+	irep->bitirep.reverse.src[jbitr + i * bnum]  |= jmp_bitmapr;
+	irep->bitirep.normal.src[jbit + i * bnum]  |=jmp_bitmap;
+      }
+
+      if (nphipos > 0 && GET_OPCODE(inst = irep->iseq[nphipos - 1]) != OP_JMP) {
+	/* fall through */
+	const int fpos = nphipos - 1;
+	const int fbit = BITMAP_NUM(fpos) - 1;
+	const int foff = BITMAP_POS(fpos);
+	const bitmap fall_bitmap = 1llu << foff;
+	const int fposr = isize - fpos - 1;
+	const int fbitr = BITMAP_NUM(fposr) - 1;
+	const int foffr = BITMAP_POS(fposr);
+	const bitmap fall_bitmapr = 1llu << foffr;
+	
+	irep->bitirep.reverse.src[fbitr + i * bnum]  |= fall_bitmapr;
+	irep->bitirep.normal.src[fbit + i * bnum]  |= fall_bitmap;
+      }
     }
   }
+
+  return updatef;
 }
 
 void compute_reg_bitmap_inter_block(mrb_state *mrb, mrb_irep *irep)
 {
-  int bnum = irep->bitirep.bnum;
-  int bpos = irep->bitirep.bnum;
+  int updatef;
+  int cnt = 0;
 
-  bitmap *traverse_bit = __builtin_alloca(bnum * sizeof(bitmap));
-  for (int cpc = 0; cpc >= 0;
-       cpc = bitmap_ctz(mrb, irep, irep->bitirep.normal.phi, cpc)) {
-    if (GET_OPCODE(irep->iseq[cpc]) == OP_RETURN) {
-      /* RETURN instruction is start of data flow */
-      compute_reg_bitmap_aux(mrb, irep, cpc);
+  do {
+    updatef = 0;
+
+    for (int cpc = 0; cpc >= 0;
+	 cpc = bitmap_ctz(mrb, irep, irep->bitirep.normal.phi, cpc)) {
+      updatef |= compute_reg_bitmap_local(mrb, irep, cpc);
+      cnt++;
     }
-  }
+  } while (updatef);
+
+  printf("%d %x %d\n", cnt, irep, irep->ilen);
 }
 
 int mrb_make_bitmap_irep(mrb_state *mrb, mrb_irep *irep)
