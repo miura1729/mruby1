@@ -49,6 +49,13 @@ typedef struct mrb_irep {
 
   /* bitmap for data flow analysis */
   mrb_bit_irep bitirep;
+
+  /* Register infomation for type analysis */
+  /* This is array of reginfo whose index is instruction.
+     Normally reginfo holds information (type information, escape info)
+     for regstor of destination of instruction. */
+  mrb_reginfo *reginfo;
+
 } mrb_irep;
 
 #define MRB_ISEQ_NO_FREE 1
@@ -61,7 +68,7 @@ void mrb_irep_incref(mrb_state*, struct mrb_irep*);
 void mrb_irep_decref(mrb_state*, struct mrb_irep*);
 void mrb_irep_cutref(mrb_state*, struct mrb_irep*);
 
-extern int mrb_make_bitmap_irep(mrb_state*, mrb_irep*);
+extern void mrb_make_bitmap_irep(mrb_state*, mrb_irep*, int);
 
 MRB_END_DECL
 

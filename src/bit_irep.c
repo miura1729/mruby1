@@ -4,9 +4,16 @@
 #include <mruby/irep.h>
 #include <mruby/opcode.h>
 
+typedef struct reg_result {
+  bitmap src[256];
+  bitmap dst[256];
+} reg_result;
+
+struct reg_result mrb_make_bitmap_irep_reps(mrb_state *, mrb_irep *, int);
+
 static void make_bitmap_irep_aux(mrb_state *mrb, mrb_irep *irep,
 				 mrb_code inst, int bitpos, int bitoff,
-				 struct regbit *bitirep)
+				 struct regbit *bitirep, int level)
 {
   int bnum = irep->bitirep.bnum;
 
@@ -30,7 +37,6 @@ static void make_bitmap_irep_aux(mrb_state *mrb, mrb_irep *irep,
   case OP_ARRAY:
   case OP_STRING:
   case OP_HASH:
-  case OP_LAMBDA:
   case OP_RANGE:
   case OP_OCLASS:
   case OP_CLASS:
@@ -95,11 +101,42 @@ static void make_bitmap_irep_aux(mrb_state *mrb, mrb_irep *irep,
     }
 	
     bitirep->dst[GETARG_A(inst) * bnum + bitpos] |= (1llu << bitoff);
-    if (argnum >= 0) {
-      for (int k = 0; k < argnum + 1; k++) {
-	bitirep->src[(GETARG_A(inst) + k) * bnum + bitpos] |= (1llu << bitoff);
-      }
+    for (int k = 0; k < argnum + 1; k++) {
+      bitirep->src[(GETARG_A(inst) + k) * bnum + bitpos] |= (1llu << bitoff);
     }
+
+    break;
+
+  case OP_LAMBDA:
+    bitirep->dst[GETARG_A(inst) * bnum + bitpos] |= (1llu << bitoff);
+
+    /* Scan Reps sub irep */
+    {
+      int repno = GETARG_B(inst);
+      struct reg_result res = mrb_make_bitmap_irep_reps(mrb, irep->reps[repno], level + 1);
+
+      /* set dst reg flag for using sub reps */
+      bitmap dst = res.dst[level];
+      bitmap src = res.src[level];
+      for (int i = 0; dst; i++) {
+	if (dst & 1) {
+	  bitirep->dst[GETARG_A(inst) * bnum + bitpos] |= (1llu << bitoff);
+	}
+	dst >>= 1;
+      }
+
+      /* set src reg flag for using sub reps */
+      for (int i = 0; src; i++) {
+	if (src & 1) {
+	  bitirep->src[GETARG_A(inst) * bnum + bitpos] |= (1llu << bitoff);
+	}
+	src >>= 1;
+      }
+
+      res.src[level] = 0;
+      res.dst[level] = 0;
+    }
+
     break;
 
   default:
@@ -141,10 +178,10 @@ int bitmap_ctz(mrb_state *mrb, mrb_irep *irep, bitmap *bit, int start)
 bitmap *bitmap_mask_with_shift(mrb_state *mrb, mrb_irep *irep, bitmap *dst, bitmap *src, int start)
 {
   int bnum = irep->bitirep.bnum;
-  start += 1;
-  int cbit = BITMAP_NUM(start) - 1;
-  int coff = BITMAP_POS(start);
+  int cbit = BITMAP_NUM(start + 1) - 1;
+  int coff = BITMAP_POS(start + 1);
   bitmap mask_lsb = 1llu << coff;
+  int ebit = cbit + 1;
 
   if (coff == 0 && cbit > 0) {
     memset(dst, 0, (cbit - 1) * sizeof(bitmap));
@@ -154,8 +191,6 @@ bitmap *bitmap_mask_with_shift(mrb_state *mrb, mrb_irep *irep, bitmap *dst, bitm
     memset(dst, 0, cbit * sizeof(bitmap));
   }
   
-  int ebit = cbit + 1;
-
   dst[cbit] = src[cbit] -  mask_lsb;
   if (src[cbit] < mask_lsb) {
     for (; ebit < bnum && src[ebit] == 0; ebit++) {
@@ -188,14 +223,12 @@ bitmap *bitmap_mask_with_shift(mrb_state *mrb, mrb_irep *irep, bitmap *dst, bitm
 bitmap *bitmap_mask_wo_shift(mrb_state *mrb, mrb_irep *irep, bitmap *dst, bitmap *src, int start)
 {
   int bnum = irep->bitirep.bnum;
-  start += 1;
-  int cbit = BITMAP_NUM(start) - 1;
-  int coff = BITMAP_POS(start);
+  int cbit = BITMAP_NUM(start + 1) - 1;
+  int coff = BITMAP_POS(start + 1);
   bitmap mask_lsb = 1llu << coff;
+  int ebit = cbit + 1;
 
   memset(dst, 0, cbit * sizeof(bitmap));
-
-  int ebit = cbit + 1;
 
   dst[cbit] = src[cbit] - mask_lsb;
   if (src[cbit] < mask_lsb) {
@@ -353,12 +386,16 @@ int compute_reg_bitmap_local(mrb_state *mrb, mrb_irep *irep, int pos)
   for (int i = 0; i <rnum; i++) {
     bitmap_and(mrb, irep, dst_map, irep->bitirep.reverse.dst + i * bnum, block_map);
     bitmap_and(mrb, irep, src_map, irep->bitirep.reverse.src + i * bnum, block_map);
+    /* check src appear before dst (this means refer value from previous block)  */
     if (bitmap_cmp(mrb, irep, dst_map, src_map) > 0 ||
 	bitmap_cmp(mrb, irep, 
 		   bitmap_xor(mrb, irep, tmpbit, dst_map, src_map),
 		   src_map) > 0) {
 
-      if (irep->bitirep.reverse.dst[cbitr + i * bnum] & phi_bitmapr == 0) {
+      /* diffusion to previous block */
+      int jmppos = nphipos + GETARG_sBx(inst);
+
+      if ((irep->bitirep.reverse.dst[cbitr + i * bnum] & phi_bitmapr) == 0) {
 	updatef |= 1;
       }
       
@@ -368,8 +405,7 @@ int compute_reg_bitmap_local(mrb_state *mrb, mrb_irep *irep, int pos)
       /*      irep->bitirep.reverse.src[cbitr + i * bnum]  |= phi_bitmapr;
 	      irep->bitirep.normal.src[cbit + i * bnum]  |= phi_bitmap;*/
 
-      /* diffusion to previous block */
-      int jmppos = nphipos + GETARG_sBx(inst);
+      /* PHI instruction keeps offsetof jump from */
       if (GET_OPCODE(inst) == OP_PHI && jmppos != nphipos) {
 	/* jmp instruction */
 	const int jbit = BITMAP_NUM(jmppos) - 1;
@@ -419,12 +455,38 @@ void compute_reg_bitmap_inter_block(mrb_state *mrb, mrb_irep *irep)
     }
   } while (updatef);
 
-  printf("%d %x %d\n", cnt, irep, irep->ilen);
+  printf("%d %p %d\n", cnt, irep, irep->ilen);
 }
 
-int mrb_make_bitmap_irep(mrb_state *mrb, mrb_irep *irep)
+struct reg_result
+mrb_make_bitmap_irep_reps(mrb_state *mrb, mrb_irep *irep, int level)
+{
+  struct reg_result result;
+  int isize = irep->ilen;
+
+  mrb_make_bitmap_irep(mrb, irep, level);
+
+  for (int i = 0; i < isize; i++) {
+    mrb_code inst = irep->iseq[i];
+
+    switch (GET_OPCODE(inst)) {
+    case OP_GETUPVAR:
+      result.src[level - GETARG_C(inst)] |= (1ull << GETARG_B(inst));
+      break;
+
+    case OP_SETUPVAR:
+      result.dst[level - GETARG_C(inst)] |= (1ull << GETARG_B(inst));
+      break;
+    }
+  }
+
+  return result;
+}
+
+void mrb_make_bitmap_irep(mrb_state *mrb, mrb_irep *irep, int level)
 {
   int isize = irep->ilen;
+  int rsize = irep->rlen;
   int bnum = BITMAP_NUM(isize);
   int bpos = BITMAP_POS(isize);
   int rnum = irep->nregs;
@@ -448,9 +510,9 @@ int mrb_make_bitmap_irep(mrb_state *mrb, mrb_irep *irep)
   bitoff = 0;
   for (int i = 0; i < isize; i++) {
     make_bitmap_irep_aux(mrb, irep, irep->iseq[i], 
-			 bitpos, bitoff, &irep->bitirep.normal);
+			 bitpos, bitoff, &irep->bitirep.normal, level);
     make_bitmap_irep_aux(mrb, irep, irep->iseq[isize - i - 1], 
-			 bitpos, bitoff, &irep->bitirep.reverse);
+			 bitpos, bitoff, &irep->bitirep.reverse, level);
 
     bitoff++;
     if (bitoff == BITMAP_SIZE) {
@@ -458,7 +520,7 @@ int mrb_make_bitmap_irep(mrb_state *mrb, mrb_irep *irep)
       bitpos++;
     }
   }
-
+  
   compute_reg_bitmap_inter_block(mrb, irep);
 }
 
