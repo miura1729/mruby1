@@ -195,6 +195,7 @@ read_irep_record(mrb_state *mrb, const uint8_t *bin, size_t *len, uint8_t flags)
 {
   mrb_irep *irep = read_irep_record_1(mrb, bin, len, flags);
   int i;
+  mrb_reg_result res;
 
   if (irep == NULL) {
     return NULL;
@@ -212,7 +213,7 @@ read_irep_record(mrb_state *mrb, const uint8_t *bin, size_t *len, uint8_t flags)
     *len += rlen;
   }
   /* bitmap */
-  mrb_make_bitmap_irep(mrb, irep, 0);
+  mrb_make_bitmap_irep(mrb, irep, 0, &res);
   return irep;
 }
 

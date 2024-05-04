@@ -68,7 +68,7 @@ void mrb_irep_incref(mrb_state*, struct mrb_irep*);
 void mrb_irep_decref(mrb_state*, struct mrb_irep*);
 void mrb_irep_cutref(mrb_state*, struct mrb_irep*);
 
-extern void mrb_make_bitmap_irep(mrb_state*, mrb_irep*, int);
+extern void mrb_make_bitmap_irep(mrb_state*, mrb_irep*, int, mrb_reg_result *);
 
 MRB_END_DECL
 

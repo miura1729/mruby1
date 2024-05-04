@@ -16,6 +16,11 @@ typedef struct BitIrep {
   int bpos;
 } mrb_bit_irep;
 
+typedef struct RegResult {
+  bitmap src[256];
+  bitmap dst[256];
+} mrb_reg_result;
+
 typedef struct RegInfo {
 
 } mrb_reginfo;
